@@ -66,6 +66,7 @@ export default function App() {
 
             await fetchData();
         } catch (e) {
+            console.error(e);
             setError(e.message);
         } finally {
             setLoading(false);
