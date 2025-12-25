@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
-
 	<PropertyGroup>
 		<TargetFramework>net8.0</TargetFramework>
 		<Nullable>enable</Nullable>
@@ -7,9 +6,19 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\PaymentsService.Application\PaymentsService.Application.csproj" />
-		<ProjectReference Include="..\PaymentsService.Infrastructure\PaymentsService.Infrastructure.csproj" />
-		<ProjectReference Include="..\..\..\SharedLibrary\SharedLibrary.csproj" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.11" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+			<PrivateAssets>all</PrivateAssets>
+		</PackageReference>
+		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.10" />
+		<PackageReference Include="RabbitMQ.Client" Version="6.8.1" />
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<ProjectReference Include="..\PaymentsService.Application\PaymentsService.Application.csproj" />
+		<ProjectReference Include="..\PaymentsService.Infrastructure\PaymentsService.Infrastructure.csproj" />
+		<ProjectReference Include="..\PaymentsService.Domain\PaymentsService.Domain.csproj" />
+	</ItemGroup>
 </Project>
