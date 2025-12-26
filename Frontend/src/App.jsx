@@ -1,11 +1,10 @@
 ﻿import React, { useEffect, useState } from 'react';
 
-const USER_ID = '123e4567-e89b-12d3-a456-426614174000';
-
 const ORDERS_API = 'http://localhost:5001';
 const PAYMENTS_API = 'http://localhost:5002';
 
 export default function App() {
+    const [userId, setUserId] = useState('123e4567-e89b-12d3-a456-426614174000');
     const [orders, setOrders] = useState([]);
     const [balance, setBalance] = useState(null);
     const [amount, setAmount] = useState(150);
@@ -13,12 +12,13 @@ export default function App() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const fetchData = async () => {
+    const fetchData = async (currentUserId = userId) => {
+        if (!currentUserId) return;
         setError('');
         try {
             const [ordersRes, accountRes] = await Promise.all([
-                fetch(`${ORDERS_API}/api/orders/by-user/${USER_ID}`),
-                fetch(`${PAYMENTS_API}/api/accounts/${USER_ID}`)
+                fetch(`${ORDERS_API}/api/orders/by-user/${currentUserId}`),
+                fetch(`${PAYMENTS_API}/api/accounts/${currentUserId}`)
             ]);
 
             if (!ordersRes.ok) {
@@ -37,6 +37,8 @@ export default function App() {
             setBalance(accountData.balance);
         } catch (e) {
             setError(e.message);
+            setOrders([]);
+            setBalance(null);
         }
     };
 
@@ -44,8 +46,22 @@ export default function App() {
         fetchData();
     }, []);
 
+    const handleChangeUserId = e => {
+        const value = e.target.value;
+        setUserId(value);
+    };
+
+    const handleLoadForUser = e => {
+        e.preventDefault();
+        fetchData(userId);
+    };
+
     const createOrder = async e => {
         e.preventDefault();
+        if (!userId) {
+            setError('Сначала введите userId');
+            return;
+        }
         setLoading(true);
         setError('');
         try {
@@ -53,7 +69,7 @@ export default function App() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    userId: USER_ID,
+                    userId,
                     amount: Number(amount),
                     description
                 })
@@ -64,7 +80,7 @@ export default function App() {
                 throw new Error(`Не удалось создать заказ: ${res.status} ${txt}`);
             }
 
-            await fetchData();
+            await fetchData(userId);
         } catch (e) {
             console.error(e);
             setError(e.message);
@@ -76,6 +92,24 @@ export default function App() {
     return (
         <div style={{ fontFamily: 'sans-serif', maxWidth: 800, margin: '20px auto' }}>
             <h1>Orders & Payments</h1>
+
+            <section>
+                <h2>Пользователь</h2>
+                <form onSubmit={handleLoadForUser}>
+                    <label>
+                        UserId:&nbsp;
+                        <input
+                            type="text"
+                            value={userId}
+                            onChange={handleChangeUserId}
+                            style={{ width: '100%' }}
+                        />
+                    </label>
+                    <button type="submit" style={{ marginTop: 8 }}>
+                        Загрузить данные
+                    </button>
+                </form>
+            </section>
 
             <section>
                 <h2>Баланс</h2>

@@ -9,7 +9,7 @@ namespace PaymentsService.Domain.Entities;
 public class OutboxEvent
 {
     public Guid Id { get; set; }
-    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     [Required]
     public required string EventType { get; set; }

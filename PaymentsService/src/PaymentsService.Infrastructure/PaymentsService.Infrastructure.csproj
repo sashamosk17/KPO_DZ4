@@ -14,6 +14,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\PaymentsService.Domain\PaymentsService.Domain.csproj" />
+		<ProjectReference Include="..\..\..\SharedLibrary\SharedLibrary.csproj" />
 	</ItemGroup>
 
 </Project>

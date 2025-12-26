@@ -21,4 +21,8 @@
 		<ProjectReference Include="..\PaymentsService.Infrastructure\PaymentsService.Infrastructure.csproj" />
 		<ProjectReference Include="..\PaymentsService.Domain\PaymentsService.Domain.csproj" />
 	</ItemGroup>
+	<ItemGroup>
+		<Compile Remove="BackgroundServices\OutboxPublisher.cs" />
+	</ItemGroup>
+
 </Project>

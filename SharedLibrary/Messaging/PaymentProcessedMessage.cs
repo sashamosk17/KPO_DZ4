@@ -1,4 +1,4 @@
-﻿namespace SharedLibrary.Messages;
+﻿namespace SharedLibrary.Messaging;
 
 /// <summary>
 /// Сообщение о результате обработки платежа.

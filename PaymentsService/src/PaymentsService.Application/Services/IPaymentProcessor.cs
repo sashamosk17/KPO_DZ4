@@ -7,5 +7,10 @@
 /// </summary>
 public interface IPaymentProcessor
 {
-    Task ProcessPaymentAsync(string messageId, Guid userId, Guid orderId, decimal amount, CancellationToken cancellationToken = default);
+    Task ProcessPaymentAsync(
+        string messageId,
+        Guid userId,
+        Guid orderId,
+        decimal amount,
+        CancellationToken cancellationToken = default);
 }

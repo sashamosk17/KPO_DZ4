@@ -2,15 +2,12 @@
 using Microsoft.EntityFrameworkCore;
 using PaymentsService.Infrastructure.Data;
 using PaymentsService.Domain.Entities;
-using SharedLibrary.Messages;
-
+using SharedLibrary.Messaging;
 
 namespace PaymentsService.Application.Services;
-
 /// <summary>
-/// Обрабатывает команду оплаты заказа:
-/// проверяет, не обрабатывали ли сообщение раньше (Inbox),
-/// списывает деньги и пишет результат в Outbox.
+/// Обрабатывает команду оплаты:
+/// идемпотентность через Inbox + списание + запись результата в Outbox.
 /// </summary>
 public class PaymentProcessor : IPaymentProcessor
 {
@@ -32,7 +29,9 @@ public class PaymentProcessor : IPaymentProcessor
             .FirstOrDefaultAsync(e => e.MessageId == messageId, cancellationToken);
 
         if (existingInbox is not null && existingInbox.IsProcessed)
+        {
             return;
+        }
 
         if (existingInbox is null)
         {
@@ -49,50 +48,37 @@ public class PaymentProcessor : IPaymentProcessor
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        await using var transaction = await _dbContext.Database
-            .BeginTransactionAsync(cancellationToken);
+        await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         var account = await _dbContext.Accounts
             .FirstOrDefaultAsync(a => a.UserId == userId, cancellationToken);
 
-        var success = false;
-        string? error = null;
+        var isSuccess = account is not null && account.Balance >= amount;
 
-        if (account is null)
+        if (isSuccess)
         {
-            success = false;
-            error = "Account not found";
-        }
-        else if (account.Balance < amount)
-        {
-            success = false;
-            error = "Insufficient funds";
-        }
-        else
-        {
-            account.Balance -= amount;
-            success = true;
+            account!.Balance -= amount;
         }
 
-        var resultMessage = new PaymentProcessedMessage
+        var paymentResult = new PaymentProcessedMessage
         {
             OrderId = orderId,
-            Success = success,
-            ErrorMessage = error
+            Success = isSuccess,
+            ErrorMessage = isSuccess ? null : "Insufficient balance"
         };
 
         var outboxEvent = new OutboxEvent
         {
             Id = Guid.NewGuid(),
             EventType = "PaymentProcessed",
-            Payload = JsonSerializer.Serialize(resultMessage),
-            IsPublished = false,
-            CreatedAtUtc = DateTime.UtcNow
+            Payload = JsonSerializer.Serialize(paymentResult)
         };
+
         existingInbox.IsProcessed = true;
 
         await _dbContext.OutboxEvents.AddAsync(outboxEvent, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+
+        await tx.CommitAsync(cancellationToken);
     }
 }

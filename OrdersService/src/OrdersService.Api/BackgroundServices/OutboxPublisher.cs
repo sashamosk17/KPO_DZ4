@@ -2,7 +2,8 @@
 using Microsoft.EntityFrameworkCore;
 using OrdersService.Infrastructure.Data;
 using SharedLibrary.Messaging;
-using SharedLibrary.Messages;
+using SharedLibrary.Messaging;
+
 
 namespace OrdersService.Api.BackgroundServices;
 

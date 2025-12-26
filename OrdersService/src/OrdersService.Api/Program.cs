@@ -1,13 +1,16 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using OrdersService.Infrastructure.Data;
 using OrdersService.Application.Services;
+using OrdersService.Api.BackgroundServices;
 using SharedLibrary.Messaging;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
 
 builder.Services.AddCors(options =>
 {
@@ -19,23 +22,23 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.AddDbContext<OrdersDbContext>(options =>
-{
-    var connectionString = builder.Configuration.GetConnectionString("OrdersDatabase");
-    options.UseNpgsql(connectionString);
-});
+builder.Services.AddDbContext<PaymentsDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("PaymentsDatabase")));
+
 
 builder.Services.AddScoped<IOrderService, OrderService>();
 
 builder.Services.AddSingleton<IMessagePublisher>(sp =>
-    new RabbitMqPublisher(builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://guest:guest@localhost:5672"));
+    new RabbitMqPublisher(builder.Configuration.GetConnectionString("RabbitMQ")
+        ?? "amqp://guest:guest@rabbitmq:5672"));
 
 builder.Services.AddSingleton<IMessageSubscriber>(sp =>
-    new RabbitMqSubscriber(builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://guest:guest@localhost:5672"));
+    new RabbitMqSubscriber(builder.Configuration.GetConnectionString("RabbitMQ")
+        ?? "amqp://guest:guest@rabbitmq:5672"));
 
-builder.Services.AddScoped<OrdersService.Api.BackgroundServices.OutboxPublisher>();
-builder.Services.AddHostedService<OrdersService.Api.BackgroundServices.OutboxPublisherWorker>();
-builder.Services.AddHostedService<OrdersService.Api.BackgroundServices.PaymentResultSubscriber>();
+builder.Services.AddScoped<OutboxPublisher>();
+builder.Services.AddHostedService<OutboxPublisherWorker>();
+builder.Services.AddHostedService<PaymentResultSubscriber>();
 
 var app = builder.Build();
 

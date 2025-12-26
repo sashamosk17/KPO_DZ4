@@ -1,80 +1,41 @@
 ﻿using System.Text.Json;
-using SharedLibrary.Messaging;
-using SharedLibrary.Messages;
 using PaymentsService.Application.Services;
+using SharedLibrary.Messaging;
 
 namespace PaymentsService.Api.BackgroundServices;
-
 /// <summary>
-/// Подписчик на сообщения <see cref="PaymentRequestedMessage"/> из очереди RabbitMQ.
-/// Обрабатывает запросы на оплату и публикует результат в очередь payment_results.
+/// Слушает очередь payments.commands и передаёт сообщения в PaymentProcessor.
 /// </summary>
 public class PaymentCommandSubscriber : BackgroundService
 {
+    private readonly IMessageSubscriber _messageSubscriber;
     private readonly IServiceProvider _serviceProvider;
-    private readonly IMessageSubscriber _subscriber;
-    private readonly IMessagePublisher _publisher;
-    private readonly ILogger<PaymentCommandSubscriber> _logger;
 
-    public PaymentCommandSubscriber(
-        IServiceProvider serviceProvider,
-        IMessageSubscriber subscriber,
-        IMessagePublisher publisher,
-        ILogger<PaymentCommandSubscriber> logger)
+    public PaymentCommandSubscriber(IMessageSubscriber messageSubscriber, IServiceProvider serviceProvider)
     {
+        _messageSubscriber = messageSubscriber;
         _serviceProvider = serviceProvider;
-        _subscriber = subscriber;
-        _publisher = publisher;
-        _logger = logger;
     }
+
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("PaymentCommandSubscriber started");
-
-        _subscriber.Subscribe("payment_requests", async message =>
+        _messageSubscriber.Subscribe("payment_requests", async raw =>
         {
-            try
+            var message = JsonSerializer.Deserialize<PaymentRequestedMessage>(raw);
+            if (message is null)
             {
-                var paymentRequest = JsonSerializer.Deserialize<PaymentRequestedMessage>(message);
-                if (paymentRequest == null)
-                {
-                    _logger.LogWarning("Received invalid payment request message");
-                    return;
-                }
-
-                _logger.LogInformation(
-                    "Received payment request for order {OrderId}",
-                    paymentRequest.OrderId);
-
-                using var scope = _serviceProvider.CreateScope();
-                var processor = scope.ServiceProvider.GetRequiredService<IPaymentProcessor>();
-
-                var messageId = Guid.NewGuid().ToString();
-
-                await processor.ProcessPaymentAsync(
-                    messageId,
-                    paymentRequest.UserId,
-                    paymentRequest.OrderId,
-                    paymentRequest.Amount,
-                    stoppingToken);
-
-                var resultMessage = new PaymentProcessedMessage
-                {
-                    OrderId = paymentRequest.OrderId,
-                    Success = true
-                };
-
-                var json = JsonSerializer.Serialize(resultMessage);
-                await _publisher.PublishAsync("payment_results", json);
-
-                _logger.LogInformation(
-                    "Payment processed for order {OrderId}",
-                    paymentRequest.OrderId);
+                return;
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error processing payment message");
-            }
+
+            using var scope = _serviceProvider.CreateScope();
+            var processor = scope.ServiceProvider.GetRequiredService<IPaymentProcessor>();
+
+            await processor.ProcessPaymentAsync(
+                message.OrderId.ToString(),
+                message.UserId,
+                message.OrderId,
+                message.Amount,
+                stoppingToken);
         });
 
         return Task.CompletedTask;

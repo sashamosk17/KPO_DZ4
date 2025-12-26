@@ -2,8 +2,6 @@
 using OrdersService.Application.Services;
 using OrdersService.Domain.Entities;
 using SharedLibrary.Messaging;
-using SharedLibrary.Messages;
-
 namespace OrdersService.Api.BackgroundServices;
 
 /// <summary>

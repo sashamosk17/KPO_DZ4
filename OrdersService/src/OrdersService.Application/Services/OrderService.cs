@@ -1,30 +1,28 @@
-﻿using System.Text.Json;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using OrdersService.Infrastructure.Data;
 using OrdersService.Application.Models;
 using OrdersService.Domain.Entities;
+using OrdersService.Infrastructure.Data;
+using SharedLibrary.Messaging;
 
 namespace OrdersService.Application.Services;
-
-
 /// <summary>
-/// Реализация сервиса заказов.
-/// В рамках одной транзакции создаёт заказ и outbox-событие
-/// для дальнейшей публикации команды оплаты в Message Queue.
+/// Сервис для управления заказами и публикации событий о платежах.
 /// </summary>
 public class OrderService : IOrderService
 {
-    private readonly OrdersDbContext _dbContext;
+    private readonly OrdersDbContext _db;
 
-    public OrderService(OrdersDbContext dbContext)
+    public OrderService(OrdersDbContext db)
     {
-        _dbContext = dbContext;
+        _db = db;
     }
 
-    /// <summary>
-    /// Создаёт новый заказ и добавляет запись в OutboxEvents,
-    /// чтобы затем отправить команду на оплату в PaymentsService.
-    /// </summary>
     public async Task<OrderResponse> CreateOrderAsync(
         CreateOrderRequest request,
         CancellationToken cancellationToken = default)
@@ -38,83 +36,73 @@ public class OrderService : IOrderService
             Status = OrderStatus.New
         };
 
-        var paymentCommand = new
+        var paymentRequested = new PaymentRequestedMessage
         {
             OrderId = order.Id,
-            order.UserId,
-            order.Amount
+            UserId = order.UserId,
+            Amount = order.Amount
         };
 
         var outboxEvent = new OutboxEvent
         {
             Id = Guid.NewGuid(),
+            CreatedAtUtc = DateTime.UtcNow,
             EventType = "PaymentRequested",
-            Payload = JsonSerializer.Serialize(paymentCommand)
+            IsPublished = false,
+            Payload = JsonSerializer.Serialize(paymentRequested)
         };
 
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
 
-        await _dbContext.Orders.AddAsync(order, cancellationToken);
-        await _dbContext.OutboxEvents.AddAsync(outboxEvent, cancellationToken);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _db.Orders.AddAsync(order, cancellationToken);
+        await _db.OutboxEvents.AddAsync(outboxEvent, cancellationToken);
 
-        await transaction.CommitAsync(cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
 
-        return MapToResponse(order);
+        return Map(order);
     }
 
     public async Task<OrderResponse?> GetOrderAsync(
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        var order = await _dbContext.Orders
-            .AsNoTracking()
-            .FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
-
-        return order is null ? null : MapToResponse(order);
+        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
+        return order is null ? null : Map(order);
     }
 
     public async Task<IReadOnlyCollection<OrderResponse>> GetUserOrdersAsync(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        var orders = await _dbContext.Orders
-            .AsNoTracking()
+        var orders = await _db.Orders
             .Where(o => o.UserId == userId)
+            .OrderByDescending(o => o.Id)
             .ToListAsync(cancellationToken);
 
-        return orders.Select(MapToResponse).ToArray();
+        return orders.Select(Map).ToArray();
     }
 
-    /// <summary>
-    /// Обновляет статус заказа, когда приходит событие об успешной или неуспешной оплате.
-    /// </summary>
     public async Task UpdateOrderStatusAsync(
         Guid orderId,
         OrderStatus status,
         CancellationToken cancellationToken = default)
     {
-        var order = await _dbContext.Orders
-            .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken);
-
+        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken);
         if (order is null)
-        {
             return;
-        }
 
         order.Status = status;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
-    private static OrderResponse MapToResponse(Order order)
+    private static OrderResponse Map(Order order) =>
+    new()
     {
-        return new OrderResponse
-        {
-            Id = order.Id,
-            UserId = order.UserId,
-            Amount = order.Amount,
-            Description = order.Description,
-            Status = order.Status
-        };
-    }
+        Id = order.Id,
+        UserId = order.UserId,
+        Amount = order.Amount,
+        Description = order.Description,
+        Status = order.Status
+    };
 }
